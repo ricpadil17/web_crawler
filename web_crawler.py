@@ -13,14 +13,6 @@ import numpy as np
 import pickle
 import json
 
-
-
-#Possible Starter Urls
-# https://time.com/6103335/seinfeld-netflix-business/
-# https://seinfeld.fandom.com/wiki/WikiSein
-# https://variety.com/lists/seinfeld-best-episodes-ranked/the-comeback/
-# https://gbdev.io/resources.html#introduction
-
 starter_url = "https://gbdev.io/resources.html#introduction"
 
 q = Queue(maxsize = 0)
@@ -138,8 +130,6 @@ def download_raw_corpus():
             filename = str(idx) + ".txt"
             with open( filename, 'w') as f:
                 html = requests.get(url, headers={'User-Agent': random.choice(user_agents_list)})
-                #print(html.text)
-                #html = urllib.request.urlopen(url)
                 soup = BeautifulSoup(html.text, 'html.parser')
                 data = soup.findAll(text=True)
                 result = filter(visible, data)
@@ -175,15 +165,13 @@ def clean_up_corpus():
         clean_filename = str(idx) + "_clean.txt"
         with open(unclean_filename, 'r') as f: 
             data = f.read()
-            #print(data)
             cleaned_file = clean_file(data)
             try:
                 sentences = sent_tokenize(cleaned_file)
             except TypeError as e:
              print(e)
-            #print(sentences)
 
-        with open (clean_filename, 'w') as f:
+        with open(clean_filename, 'w') as f:
             for sentence in sentences:
                 f.write(sentence + '\n')
         
@@ -193,13 +181,13 @@ def remove_aposterphe(data):
 
 
 def remove_punctuation(data):
-    symbols = "\"#$%&()*+-/:;<=>@[\]^_`{|}~\n•"
+    symbols = "\"#$%&()*+-/:;<=>@[\]^_`{|}~\n•?.!"
     for i in symbols:
         data = np.char.replace(data, i, '')
     return_string = np.array2string(data)
     return return_string
 
-def remove_period(data):
+def remove_sentence_end(data):
     symbols = "!.?"
     for i in symbols:
         data = np.char.replace(data, i, '')
@@ -224,27 +212,22 @@ def remove_single_characters(data):
 
 def remove_extra_text(data):
     sent = sent_tokenize(data)
-    new_text = ""
+    new_text = []
     for s in sent:
-        if "open in new window" not in s:
-            new_text = new_text + " " + s.replace('open in new window','')
-    #print(new_text)
-    return new_text
-        
+        if "open in new window" in s:
+            new_text.append(s.replace('open in new window',''))
+        else: 
+            new_text.append(s)
+    return new_text        
 
 # Using the pre-process helper functions, pre-process the documents in the corpus
 def preprocess_data(file):
     data = file.lower()
-    data = remove_extra_text(data)
     data = remove_punctuation(data)
-    clean_corpus.append(data)
     data = remove_aposterphe(data)
     data = remove_single_characters(data)
-    data = remove_period(data)
+    data = remove_sentence_end(data)
     data = remove_stop_words(data)
-    #data = stemming(data)
-    #data = lemming(data)
-    #print(data)
     return data
 
 # use TF-IDF measure to determine important words in the corpus.
@@ -275,7 +258,7 @@ def extract_important_terms():
     # order the results by tf-idf score
     # print the top 40 results
     top_forty = sorted(tf_idf_dict, key=tf_idf_dict.get, reverse=True)[:40]
-    #print(top_forty)
+    print("Top 40 terms are: ", top_forty)
 
     # write top 40 results to a file
     results = open("top40.txt", 'w')
@@ -295,13 +278,10 @@ def calculate_tf_idf(corpus):
 
     for i in range(len(corpus)):
         tf_per_document.append(tf(word_dicts,corpus, i))
-    #print(tf_per_document)
 
     idfs = idf(word_dicts)
-    #print(idfs)
 
     tf_idf_dict = tfidf(tf_per_document,idfs)
-    #print(tf_idf_dict)
     return tf_idf_dict
 
 # Given TF and IDF, calculate the TF-IDF
@@ -352,31 +332,52 @@ def create_word_dicts(corpus):
 
 
 #5. Manually determine the top 10 terms from step 4, based on your domain knowledge.
-# seinfeld, jerry, george, elaine, kramer, larry, nbc, morty, helen, episodes
 def define_top_ten():
     return ["gameboy", "game", "score", "gbdk", "development", "nes", "software", "programming", "assembly", "tutorials"]
-
 
 
 # knowledge base is in the form of {(key, value)} as 
 # {(term, some sentences about a term from the corpus)}
 def build_knowledge_base(terms):
     print("Top Ten Terms: ", terms)
-    print("clean corpus LENGTH is: ", len(clean_corpus))
     knowledge_base = dict.fromkeys(terms, [])
     sent = []
     term_in_sent = []
+    corpus = [] # each element is a whole document as a string
+    clean_corpus = []
+
+    for idx in range(15):
+        filename = str(idx) + "_clean.txt"
+        with open (filename, 'r') as f:
+            data = f.read()
+        corpus.append(data)
+    
+    # write base corpus, no pre-processing to file for debugging
+    with open('basecorpus.txt', 'w') as f: 
+        for document in corpus:
+            f.write(document)
+
+    # clean the corpus
+    for idx in range(len(corpus)):
+        data = corpus[idx] # data is a whole document as a string
+        data = data.lower() # data is a lowercase whole document as a string
+        data = remove_extra_text(data) # data is now a list of sentences
+        for datum in data: 
+            clean_corpus.append(datum)
+
+    # write clean corpus to file for debugging
+    with open('cleancorpus.txt', 'w') as f: 
+        for document in clean_corpus:
+            f.write(document+"\n")
 
     # tokenize the sentences in the cleaned corpus
     for document in clean_corpus: 
         tokens = sent_tokenize(document)
         for token in tokens:
             sent.append(token)
-        #pprint(sent)
 
     # if the term is in a sentence in the corpus, add the sentence to the knowledge base
     for term in terms:
-        print("looking for term", term)
         term_in_sent = []
         for sentence in sent:
             if term in sentence:
@@ -384,11 +385,12 @@ def build_knowledge_base(terms):
         knowledge_base[term] = term_in_sent
 
 
-    print("len of assembly sentences is : ", len(knowledge_base["gameboy"]))
-    print(knowledge_base['assembly'][10])
+    print("len of assembly sentences is : ", len(knowledge_base["assembly"]))
+    print(knowledge_base['assembly'][8])
 
-    with open('kb.txt', 'w') as f:
-        f.write(json.dumps(knowledge_base))
+    # prints the knowledge base in text format
+    with open('kb.txt', 'wt') as f:
+        pprint(knowledge_base, stream=f)
 
     # Pickle Knowledge Base
     with open('knowledge_base.pickle', 'wb') as handle:
